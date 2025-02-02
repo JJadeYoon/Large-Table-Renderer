@@ -1,6 +1,4 @@
 import React from 'react';
-import './App.css';
-import Table from './components/Table';
 
 function App() {
   return (
@@ -9,10 +7,10 @@ function App() {
         <h1>Large Table Renderer</h1>
       </header>
       <main>
-        <Table />
+        {/* 여기에 테이블 컴포넌트가 들어갈 예정입니다 */}
       </main>
     </div>
   );
 }
 
-export default App;
+export default App; 
