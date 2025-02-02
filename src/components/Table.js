@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import '../styles/Table.css';
 
 function Table() {
-  // 테스트를 위한 간단한 데이터
   const rows = 10;
   const cols = 5;
   
@@ -12,13 +11,9 @@ function Table() {
     return letters[index];
   };
   
-  // 테이블 데이터를 상태로 관리
-  const [tableData, setTableData] = useState(() => {
-    return {};
-  });
-
   // 편집 중인 셀의 위치를 저장
   const [editingCell, setEditingCell] = useState(null);
+  const [tableData, setTableData] = useState({});  // 빈 객체로 초기화
 
   const handleDoubleClick = (rowIndex, colIndex) => {
     setEditingCell(`${rowIndex}-${colIndex}`);
@@ -35,20 +30,23 @@ function Table() {
   };
 
   // 수식 계산 함수
-  const evaluateFormula = (formula) => {
+  const evaluateFormula = (formula, data = tableData) => {
     try {
       // = 제거
-      const expression = formula.substring(1);
+      const expression = formula.substring(1).replace(/\s+/g, '');  // 모든 공백 제거
       
       console.log('Original expression:', expression);
       
-      // 셀 참조를 값으로 변환 (예: A1 -> 해당 셀의 값)
-      const evaluatedExpression = expression.replace(/[A-Z]+\d+/g, (cellRef) => {
+      // $ 기호 제거 (절대 참조 처리)
+      const expressionWithoutDollar = expression.replace(/\$/g, '');
+      
+      // 셀 참조를 값으로 변환 (예: A1 또는 A$1 -> 해당 셀의 값)
+      const evaluatedExpression = expressionWithoutDollar.replace(/[A-Z]+\d+/g, (cellRef) => {
         const [row, col] = parseCellReference(cellRef);
         console.log('Cell reference:', cellRef, 'parsed to:', row, col);
-        const value = tableData[`${row}-${col}`] || '0';
+        const value = Number(data[`${row}-${col}`]) || 0;
         console.log('Cell value:', value);
-        return isNaN(value) ? '0' : value;
+        return value;
       });
       
       console.log('Evaluated expression:', evaluatedExpression);
@@ -56,12 +54,34 @@ function Table() {
       // 계산 실행
       const result = eval(evaluatedExpression);
       console.log('Result:', result);
-      return result;
+      return Number(result);
     } catch (error) {
       console.error('Formula evaluation error:', error);
       return '#ERROR!';
     }
   };
+
+  // 초기 테스트 데이터 설정
+  const setupTestData = () => {
+    const newData = {};
+    // A1에 초기값 설정
+    newData['0-0'] = 1;  // A1 = 1
+    newData['0-0_raw'] = '1';
+    
+    // B열 수식 설정 (B1부터 B{rows})
+    for (let i = 0; i < rows; i++) {
+      const formula = i === 0 ? '=A$1' : `=A$1+B${i}`;  // B{i+1} = A$1 + B{i}
+      newData[`${i}-1_raw`] = formula;  // B{i+1}의 수식
+      newData[`${i}-1`] = evaluateFormula(formula, newData);  // 현재까지의 newData를 사용하여 계산
+    }
+    
+    setTableData(newData);
+  };
+
+  // 컴포넌트 마운트 시 테스트 데이터 설정
+  useEffect(() => {
+    setupTestData();
+  }, []);
 
   const handleChange = (e, rowIndex, colIndex) => {
     const newValue = e.target.value;
