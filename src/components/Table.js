@@ -47,6 +47,7 @@ function Table() {
       <table>
         <thead>
           <tr>
+            <th className="row-header">Row</th>
             {Array(cols).fill().map((_, colIndex) => (
               <th key={colIndex}>
                 {getColumnLabel(colIndex)}
@@ -57,6 +58,7 @@ function Table() {
         <tbody>
           {Array(rows).fill().map((_, rowIndex) => (
             <tr key={rowIndex}>
+              <td className="row-header">{rowIndex + 1}</td>
               {Array(cols).fill().map((_, colIndex) => {
                 const cellId = `${rowIndex}-${colIndex}`;
                 const isEditing = editingCell === cellId;
