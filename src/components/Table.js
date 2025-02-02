@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import '../styles/Table.css';
+import Cell from './Cell';
 
 function Table() {
   const rows = 100000;
@@ -81,11 +82,14 @@ function Table() {
     processNextBatch();
   };
 
-  const handleDoubleClick = (rowIndex, colIndex) => {
-    setEditingCell(`${rowIndex}-${colIndex}`);
+  // 1. 기본 유틸리티 함수들 먼저 선언
+  const calculateExpression = (expression) => {
+    if (!/^[0-9+\-*/\s.()]+$/.test(expression)) {
+      throw new Error('Invalid expression');
+    }
+    return new Function(`return ${expression}`)();
   };
 
-  // 셀 참조 변환 함수 (예: A1 -> [0,0])
   const parseCellReference = (ref) => {
     const column = ref.match(/[A-Z]+/)[0];
     const row = parseInt(ref.match(/\d+/)[0]) - 1;
@@ -95,26 +99,76 @@ function Table() {
     return [row, col];
   };
 
-  // 안전한 수식 계산 함수
-  const calculateExpression = (expression) => {
-    // 허용된 연산자와 숫자만 포함되어 있는지 확인
-    if (!/^[0-9+\-*/\s.()]+$/.test(expression)) {
-      throw new Error('Invalid expression');
-    }
-    
-    // Function 생성자를 사용하여 수식 계산
-    return new Function(`return ${expression}`)();
-  };
-
-  // 셀 의존성 추가 함수
-  const addDependency = useCallback((targetCell, dependentCell) => {
-    setDependencyGraph(prev => ({
-      ...prev,
-      [targetCell]: [...(prev[targetCell] || []), dependentCell]
-    }));
-  }, []);
+  // 2. 데이터 관련 기본 함수들
+  const getCellValue = useCallback((cellId) => {
+    return tableData[cellId] || '';
+  }, [tableData]);
   
-  // 셀 의존성 체크 및 재계산
+  const getCellRawValue = useCallback((cellId) => {
+    return tableData[`${cellId}_raw`] || tableData[cellId] || '';
+  }, [tableData]);
+
+  // 3. 의존성 그래프 관련 함수
+  const updateDependencyGraph = useCallback((dependencies, formula) => {
+    setDependencyGraph(prev => {
+      const newGraph = {...prev};
+      dependencies.forEach(dep => {
+        if (!newGraph[dep]) {
+          newGraph[dep] = new Set();
+        }
+        newGraph[dep].add(formula);
+      });
+      return newGraph;
+    });
+  }, []);
+
+  // 4. 수식 계산 관련 함수들
+  const evaluateFormula = useCallback((formula, data = tableData) => {
+    try {
+      const cacheKey = `${formula}_${JSON.stringify(data)}`;
+      if (calculationCache[cacheKey] !== undefined) {
+        return calculationCache[cacheKey];
+      }
+      
+      const expression = formula.substring(1).replace(/\s+/g, '');
+      const expressionWithoutDollar = expression.replace(/\$/g, '');
+      
+      const dependencies = new Set();
+      
+      const evaluatedExpression = expressionWithoutDollar.replace(/[A-Z]+\d+/g, (cellRef) => {
+        const [row, col] = parseCellReference(cellRef);
+        const cellId = `${row}-${col}`;
+        dependencies.add(cellId);
+        const value = Number(data[`${row}-${col}`]) || 0;
+        return value;
+      });
+      
+      const result = calculateExpression(evaluatedExpression);
+      
+      setCalculationCache(prev => ({
+        ...prev,
+        [cacheKey]: result
+      }));
+      
+      updateDependencyGraph(Array.from(dependencies), formula);
+      
+      return Number(result);
+    } catch (error) {
+      console.error('Formula evaluation error:', error);
+      return '#ERROR!';
+    }
+  }, [calculationCache, updateDependencyGraph, tableData]);
+
+  // 5. 셀 표시 값 가져오기 (evaluateFormula 의존)
+  const getCellDisplayValue = useCallback((cellId) => {
+    const rawValue = tableData[`${cellId}_raw`] || '';
+    if (rawValue.startsWith('=')) {
+      return evaluateFormula(rawValue);
+    }
+    return tableData[cellId] || '';
+  }, [tableData, evaluateFormula]);
+
+  // 6. 재계산 함수
   const recalculateDependents = useCallback((changedCellId) => {
     const dependents = dependencyGraph[changedCellId] || [];
     const processed = new Set();
@@ -131,72 +185,19 @@ function Table() {
           [cellId]: newValue
         }));
         
-        // 의존하는 셀들도 재계산
         (dependencyGraph[cellId] || []).forEach(recalculate);
       }
     };
     
     dependents.forEach(recalculate);
-  }, [dependencyGraph, tableData]);
+  }, [dependencyGraph, tableData, evaluateFormula]);
 
-  // 수식 계산 함수
-  const evaluateFormula = useCallback((formula, data = tableData) => {
-    try {
-      const cacheKey = `${formula}_${JSON.stringify(data)}`;
-      if (calculationCache[cacheKey] !== undefined) {
-        return calculationCache[cacheKey];
-      }
-      
-      const expression = formula.substring(1).replace(/\s+/g, '');
-      const expressionWithoutDollar = expression.replace(/\$/g, '');
-      
-      // 의존성 수집
-      const dependencies = new Set();
-      
-      const evaluatedExpression = expressionWithoutDollar.replace(/[A-Z]+\d+/g, (cellRef) => {
-        const [row, col] = parseCellReference(cellRef);
-        const cellId = `${row}-${col}`;
-        dependencies.add(cellId);
-        const value = Number(data[`${row}-${col}`]) || 0;
-        return value;
-      });
-      
-      const result = calculateExpression(evaluatedExpression);
-      
-      // 결과 캐싱
-      setCalculationCache(prev => ({
-        ...prev,
-        [cacheKey]: result
-      }));
-      
-      // 의존성 업데이트
-      dependencies.forEach(dep => {
-        addDependency(dep, formula);
-      });
-      
-      return Number(result);
-    } catch (error) {
-      console.error('Formula evaluation error:', error);
-      return '#ERROR!';
-    }
-  }, [calculationCache, addDependency]);
-
-  // 컴포넌트 마운트 시 테스트 데이터 설정
-  useEffect(() => {
-    setupTestData();
-  }, []);  // 빈 의존성 배열
-
-  // 셀 값 가져오기 최적화
-  const getCellValue = useCallback((cellId) => {
-    return tableData[cellId] || '';
-  }, []);
-  
-  // 셀 원본 값 가져오기 최적화
-  const getCellRawValue = useCallback((cellId) => {
-    return tableData[`${cellId}_raw`] || tableData[cellId] || '';
+  // 7. 이벤트 핸들러들
+  const handleCellDoubleClick = useCallback((rowIndex, colIndex) => {
+    setEditingCell(`${rowIndex}-${colIndex}`);
   }, []);
 
-  const handleChange = (e, rowIndex, colIndex) => {
+  const handleCellChange = useCallback((e, rowIndex, colIndex) => {
     const newValue = e.target.value;
     const cellId = `${rowIndex}-${colIndex}`;
     
@@ -210,25 +211,48 @@ function Table() {
       [`${cellId}_raw`]: newValue
     }));
     
-    // 캐시 무효화
     setCalculationCache({});
-    
-    // 의존하는 셀들 재계산
     recalculateDependents(cellId);
-  };
+  }, [evaluateFormula, recalculateDependents]);
 
-  // 셀 표시 값 가져오기
-  const getCellDisplayValue = (cellId) => {
-    const rawValue = tableData[`${cellId}_raw`] || '';
-    if (rawValue.startsWith('=')) {
-      return evaluateFormula(rawValue);
-    }
-    return tableData[cellId] || '';
-  };
-
-  const handleBlur = () => {
+  const handleBlur = useCallback(() => {
     setEditingCell(null);
-  };
+  }, []);
+
+  // 8. 렌더링 관련 함수들
+  const renderRow = useCallback((rowIndex) => {
+    return (
+      <tr key={rowIndex}>
+        <td className="row-header">{rowIndex + 1}</td>
+        {Array(cols).fill().map((_, colIndex) => {
+          const cellId = `${rowIndex}-${colIndex}`;
+          const isEditing = editingCell === cellId;
+          
+          return (
+            <Cell
+              key={colIndex}
+              rowIndex={rowIndex}
+              colIndex={colIndex}
+              isEditing={isEditing}
+              value={getCellDisplayValue(cellId)}
+              rawValue={tableData[`${cellId}_raw`] || tableData[cellId] || ''}
+              onDoubleClick={handleCellDoubleClick}
+              onChange={handleCellChange}
+              onBlur={handleBlur}
+            />
+          );
+        })}
+      </tr>
+    );
+  }, [cols, editingCell, tableData, getCellDisplayValue, handleCellDoubleClick, handleCellChange, handleBlur]);
+
+  // 캐시 최적화
+  const memoizedVisibleRange = useMemo(() => getVisibleRange(), [scrollTop]);
+
+  // 컴포넌트 마운트 시 테스트 데이터 설정
+  useEffect(() => {
+    setupTestData();
+  }, []);  // 빈 의존성 배열
 
   return (
     <div 
@@ -266,36 +290,9 @@ function Table() {
             <td colSpan={cols + 1} style={{ height: scrollTop, padding: 0 }} />
           </tr>
           {Array(rows).fill().map((_, rowIndex) => {
-            const { start, end } = getVisibleRange();
+            const { start, end } = memoizedVisibleRange;
             if (rowIndex < start || rowIndex > end) return null;
-            return (
-              <tr key={rowIndex}>
-                <td className="row-header">{rowIndex + 1}</td>
-                {Array(cols).fill().map((_, colIndex) => {
-                  const cellId = `${rowIndex}-${colIndex}`;
-                  const isEditing = editingCell === cellId;
-
-                  return (
-                    <td 
-                      key={colIndex}
-                      onDoubleClick={() => handleDoubleClick(rowIndex, colIndex)}
-                    >
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={tableData[`${cellId}_raw`] || tableData[cellId] || ''}
-                          onChange={(e) => handleChange(e, rowIndex, colIndex)}
-                          onBlur={handleBlur}
-                          autoFocus
-                        />
-                      ) : (
-                        getCellDisplayValue(cellId)
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-            );
+            return renderRow(rowIndex);
           })}
           <tr>
             <td colSpan={cols + 1} style={{ 
