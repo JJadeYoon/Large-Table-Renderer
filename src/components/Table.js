@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import '../styles/Table.css';
 
 function Table() {
-  const rows = 10000;
+  const rows = 100000;
   const cols = 3;
   const rowHeight = 35;  // 행 높이
   const viewportHeight = window.innerHeight - 100;  // 화면 높이에서 여백 제외
@@ -59,9 +59,13 @@ function Table() {
       
       for (let i = processed; i < end; i++) {
         const formula = i === 0 ? '=A$1' : `=A$1+B${i}`;
-        const prevValue = i === 0 ? 1 : (Number(newData[`${i-1}-1`]) || 0);
         newData[`${i}-1_raw`] = formula;
-        newData[`${i}-1`] = 1 + prevValue;  // 직접 계산
+        if (i === 0) {
+          newData[`${i}-1`] = 1;  // B1 = A1 = 1
+        } else {
+          const prevValue = Number(newData[`${i-1}-1`]) || 0;
+          newData[`${i}-1`] = 1 + prevValue;  // B{i+1} = A1 + B{i}
+        }
       }
       
       setTableData(prev => ({...prev, ...newData}));
