@@ -1,6 +1,8 @@
 import React from 'react';
 import './App.css';
 import Table from './components/Table';
+import Benchmark from './components/Benchmark';
+import './styles/Benchmark.css';
 
 function App() {
   return (
@@ -10,6 +12,7 @@ function App() {
       </header>
       <main>
         <Table />
+        <Benchmark />
       </main>
     </div>
   );

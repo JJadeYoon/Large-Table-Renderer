@@ -47,20 +47,28 @@ export class FPSMeter {
     this.frames = 0;
     this.lastTime = performance.now();
     this.fps = 0;
+    this.isRunning = false;
   }
 
   start() {
     this.frames = 0;
     this.lastTime = performance.now();
+    this.isRunning = true;
     this.measure();
   }
 
+  stop() {
+    this.isRunning = false;
+  }
+
   measure = () => {
+    if (!this.isRunning) return this.fps;
+
     const currentTime = performance.now();
     this.frames++;
 
     if (currentTime >= this.lastTime + 1000) {
-      this.fps = (this.frames * 1000) / (currentTime - this.lastTime);
+      this.fps = Math.round((this.frames * 1000) / (currentTime - this.lastTime));
       this.frames = 0;
       this.lastTime = currentTime;
     }
@@ -115,7 +123,25 @@ export const collectMetrics = async (component, operations) => {
 
   // Measure FPS
   const fpsMeter = new FPSMeter();
-  metrics.fps = fpsMeter.measure();
+  fpsMeter.start();
+  
+  // Simulate some interactions to measure FPS
+  await new Promise(resolve => {
+    let count = 0;
+    const interval = setInterval(() => {
+      if (count++ >= 10) {
+        clearInterval(interval);
+        fpsMeter.stop();
+        metrics.fps = fpsMeter.fps;
+        resolve();
+      }
+      // Trigger some DOM updates to measure FPS
+      const container = document.querySelector('.table-container, .fortune-sheet-container, .univer-sheet-container');
+      if (container) {
+        container.style.transform = `translateY(${Math.random() * 10}px)`;
+      }
+    }, 100);
+  });
 
   return metrics;
 }; 
