@@ -3,7 +3,7 @@ import '../styles/Table.css';
 import Cell from './Cell';
 
 function Table() {
-  const rows = 1000000;
+  const rows = 10000;
   const cols = 3;
   const rowHeight = 35;  // 행 높이
   const viewportHeight = window.innerHeight - 100;  // 화면 높이에서 여백 제외
@@ -49,10 +49,9 @@ function Table() {
   // 초기 데이터 설정 함수
   const setupTestData = () => {
     const newData = {};
-    newData['0-0'] = 1;
+    newData['0-0'] = 1;  // A1 셀의 초기값을 1로 설정
     newData['0-0_raw'] = '1';
     
-    // 배치 크기를 더 크게 설정
     const batchSize = 5000;
     let processed = 0;
     
@@ -63,11 +62,16 @@ function Table() {
       for (let i = processed; i < end; i++) {
         const formula = i === 0 ? '=A$1' : `=A$1+B${i}`;
         batchData[`${i}-1_raw`] = formula;
+        
+        // B열의 값을 수식에 따라 계산
         if (i === 0) {
-          batchData[`${i}-1`] = 1;
+          // B1의 경우 A1의 값을 그대로 사용
+          batchData[`${i}-1`] = Number(newData['0-0']);
         } else {
-          const prevValue = Number(batchData[`${i-1}-1`]) || Number(newData[`${i-1}-1`]) || 0;
-          batchData[`${i}-1`] = 1 + prevValue;
+          // Bi의 경우 A1 + B(i-1) 계산
+          const a1Value = Number(newData['0-0']);
+          const prevBValue = Number(batchData[`${i-1}-1`]) || Number(newData[`${i-1}-1`]) || 0;
+          batchData[`${i}-1`] = a1Value + prevBValue;
         }
       }
       
@@ -136,7 +140,7 @@ function Table() {
       const dependencies = new Set();
       const relevantData = {};
       
-      // 먼저 의존성 수집
+      // 수식에서 셀 참조 찾기
       formula.replace(/[A-Z]+\d+/g, (cellRef) => {
         const [row, col] = parseCellReference(cellRef);
         const cellId = `${row}-${col}`;
@@ -152,11 +156,18 @@ function Table() {
       const expression = formula.substring(1).replace(/\s+/g, '');
       const expressionWithoutDollar = expression.replace(/\$/g, '');
       
+      // 수식 내의 각 셀 참조를 실제 값으로 대체
       const evaluatedExpression = expressionWithoutDollar.replace(/[A-Z]+\d+/g, (cellRef) => {
         const [row, col] = parseCellReference(cellRef);
         const cellId = `${row}-${col}`;
         dependencies.add(cellId);
-        const value = Number(data[`${row}-${col}`]) || 0;
+        
+        // 참조된 셀이 수식을 가지고 있다면 먼저 그 수식을 계산
+        const rawValue = data[`${cellId}_raw`] || '';
+        const value = rawValue.startsWith('=') 
+          ? evaluateFormula(rawValue, data)
+          : Number(data[cellId]) || 0;
+          
         return value;
       });
       
