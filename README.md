@@ -1,82 +1,82 @@
 # Large Table Renderer
 
-대용량 데이터를 처리할 수 있는 Excel과 유사한 테이블 렌더러입니다. 100만 행의 데이터를 효율적으로 처리하며, 수식 계산과 셀 간의 의존성을 지원합니다.
+An Excel-like table renderer capable of handling large-scale data. It efficiently processes 1 million rows while supporting formula calculations and cell dependencies.
 
-## 주요 기능
+## Key Features
 
-### 1. 가상화된 스크롤
-- 100만 행의 데이터를 부드럽게 스크롤
-- 현재 보이는 영역의 데이터만 렌더링하여 메모리 효율성 확보
-- 스크롤 시 동적으로 데이터 로드
+### 1. Virtualized Scrolling
+- Smooth scrolling through 1 million rows
+- Memory-efficient rendering of only visible data
+- Dynamic data loading during scroll
 
-### 2. 수식 계산 기능
-- Excel과 유사한 수식 문법 지원
-- 셀 참조를 통한 계산 (예: =A1+B1)
-- 실시간 수식 계산 및 업데이트
+### 2. Formula Calculation
+- Excel-like formula syntax support
+- Cell reference calculations (e.g., =A1+B1)
+- Real-time formula evaluation and updates
 
-### 3. 셀 의존성 관리
-- 셀 간의 의존성 자동 추적
-- 의존성 그래프를 통한 효율적인 업데이트
-- 순환 참조 방지
+### 3. Cell Dependency Management
+- Automatic cell dependency tracking
+- Efficient updates through dependency graph
+- Prevention of circular references
 
-### 4. 최적화된 성능
-- React.memo를 통한 불필요한 리렌더링 방지
-- 계산 결과 캐싱
-- 배치 업데이트를 통한 성능 최적화
+### 4. Optimized Performance
+- Prevention of unnecessary re-renders using React.memo
+- Calculation result caching
+- Performance optimization through batch updates
 
-## 기술 스택
+## Tech Stack
 
 - React 18
 - JavaScript
 - CSS
 
-## 실행 방법
+## Getting Started
 
-1. 의존성 설치
+1. Install Dependencies
 ```bash
 npm install
 ```
 
-2. 개발 서버 실행
+2. Run Development Server
 ```bash
 npm start
 ```
 
-3. 브라우저에서 확인
+3. View in Browser
 ```
 http://localhost:3000
 ```
 
-## 구현 방식
+## Implementation Details
 
-### 1. 가상 스크롤 구현
-- 전체 테이블 높이를 계산하여 스크롤바 크기 설정
-- 현재 스크롤 위치를 기반으로 보이는 행만 렌더링
-- 위/아래 여백을 동적으로 조정하여 스크롤 위치 보정
+### 1. Virtual Scroll Implementation
+- Scroll bar sizing based on total table height
+- Rendering of only visible rows based on current scroll position
+- Dynamic adjustment of top/bottom padding for scroll position correction
 
-### 2. 수식 처리
-- 정규식을 사용하여 셀 참조 파싱
-- 의존성 그래프 구축 및 관리
-- 재귀적 수식 평가 로직
+### 2. Formula Processing
+- Cell reference parsing using regular expressions
+- Dependency graph construction and management
+- Recursive formula evaluation logic
 
-### 3. 상태 관리
-- 테이블 데이터는 객체 형태로 관리
-- 셀 ID를 키로 사용하여 O(1) 접근
-- 수식과 계산된 값을 별도로 저장
+### 3. State Management
+- Table data managed in object format
+- O(1) access using cell IDs as keys
+- Separate storage for formulas and calculated values
 
-### 4. 성능 최적화
-- requestAnimationFrame을 사용한 배치 업데이트
-- 메모이제이션을 통한 리렌더링 최적화
-- 계산 캐시를 통한 중복 계산 방지
+### 4. Performance Optimization
+- Batch updates using requestAnimationFrame
+- Render optimization through memoization
+- Prevention of duplicate calculations using calculation cache
 
-## 프로젝트 구조
+## Project Structure
 
 ```
 src/
   ├── components/
-  │   ├── Table.js     # 메인 테이블 컴포넌트
-  │   └── Cell.js      # 개별 셀 컴포넌트
+  │   ├── Table.js     # Main table component
+  │   └── Cell.js      # Individual cell component
   ├── styles/
-  │   └── Table.css    # 테이블 스타일
-  └── App.js           # 앱 진입점
-```
+  │   └── Table.css    # Table styles
+  └── App.js           # Application entry point
+``` 
