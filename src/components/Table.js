@@ -201,11 +201,26 @@ function Table() {
     newData['0-1'] = 1;  // A1의 값
     newData['0-1_raw'] = b1Formula;
     
+    // C1 값 설정 (A1 + B1 * B2)
+    const c1Formula = '=A1+B1*B2';
+    newData['0-2_raw'] = c1Formula;
+    
     // B1의 의존성 설정 (A1에 의존)
     if (!newDependencyGraph['0-0']) {
       newDependencyGraph['0-0'] = new Set();
     }
     newDependencyGraph['0-0'].add('0-1');
+    
+    // C1의 의존성 설정 (A1, B1, B2에 의존)
+    newDependencyGraph['0-0'].add('0-2');  // A1 의존성
+    if (!newDependencyGraph['0-1']) {
+      newDependencyGraph['0-1'] = new Set();
+    }
+    newDependencyGraph['0-1'].add('0-2');  // B1 의존성
+    if (!newDependencyGraph['1-1']) {
+      newDependencyGraph['1-1'] = new Set();
+    }
+    newDependencyGraph['1-1'].add('0-2');  // B2 의존성
     
     // B2부터 순차적으로 계산
     for (let i = 1; i < visibleRows; i++) {
@@ -231,6 +246,10 @@ function Table() {
       }
       newDependencyGraph[prevCellId].add(cellId);
     }
+    
+    // C1 값 계산
+    const { result } = evaluateFormula(c1Formula, '0-2', newData);
+    newData['0-2'] = result;
     
     setTableData(newData);
     setDependencyGraph(newDependencyGraph);
