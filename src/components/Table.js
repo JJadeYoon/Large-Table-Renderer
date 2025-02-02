@@ -178,10 +178,17 @@ function Table() {
     }
   }, [getVisibleRange, tableData, dependencyGraph]);
 
-  // 알파벳 열 헤더 생성 함수
+  // 알파벳 열 헤더 생성 함수 수정
   const getColumnLabel = (index) => {
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    return letters[index];
+    let label = '';
+    let num = index;
+    
+    while (num >= 0) {
+      label = String.fromCharCode('A'.charCodeAt(0) + (num % 26)) + label;
+      num = Math.floor(num / 26) - 1;
+    }
+    
+    return label;
   };
   
   // 초기 데이터 설정 함수
