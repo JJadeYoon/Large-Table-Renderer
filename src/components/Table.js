@@ -6,6 +6,12 @@ function Table() {
   const rows = 10;
   const cols = 5;
   
+  // 알파벳 열 헤더 생성 함수
+  const getColumnLabel = (index) => {
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    return letters[index];
+  };
+  
   // 테이블 데이터를 상태로 관리
   const [tableData, setTableData] = useState(() => {
     const data = {};
@@ -39,6 +45,15 @@ function Table() {
   return (
     <div className="table-container">
       <table>
+        <thead>
+          <tr>
+            {Array(cols).fill().map((_, colIndex) => (
+              <th key={colIndex}>
+                {getColumnLabel(colIndex)}
+              </th>
+            ))}
+          </tr>
+        </thead>
         <tbody>
           {Array(rows).fill().map((_, rowIndex) => (
             <tr key={rowIndex}>
