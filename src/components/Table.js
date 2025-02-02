@@ -4,7 +4,7 @@ import Cell from './Cell';
 
 function Table() {
   // 1. 상수 선언
-  const rows = 100000;
+  const rows = 1000000;
   const cols = 3;
   const rowHeight = 35;  // 행 높이
   const viewportHeight = window.innerHeight - 100;  // 화면 높이에서 여백 제외
