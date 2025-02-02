@@ -1,13 +1,14 @@
 .table-container {
   width: 100%;
   padding: 20px;
-  position: relative;
+  box-sizing: border-box;
 }
 
 table {
   border-collapse: collapse;
   width: 100%;
   table-layout: fixed;
+  position: relative;
 }
 
 .row-header {
@@ -45,4 +46,11 @@ td input {
   padding: 8px;
   border: 2px solid #4a90e2;
   box-sizing: border-box;
+}
+
+thead {
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 1;
 } 
