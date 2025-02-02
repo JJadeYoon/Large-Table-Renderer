@@ -20,6 +20,11 @@ function Table() {
   // 3. ref 선언
   const containerRef = useRef(null);
   
+  // 계산 큐 관리를 위한 ref 추가
+  const calculationQueue = useRef([]);
+  const isCalculating = useRef(false);
+  const lastVisibleRange = useRef({ start: 0, end: 0 });
+  
   // 4. 기본 유틸리티 함수들
   const calculateExpression = (expression) => {
     if (!/^[0-9+\-*/\s.()]+$/.test(expression)) {
@@ -126,29 +131,42 @@ function Table() {
   }, [scrollTop]);
 
   const handleScroll = useCallback((e) => {
-    requestAnimationFrame(() => {
-      const newScrollTop = e.target.scrollTop;
-      setScrollTop(newScrollTop);
-      
-      // 새로 보이는 행들의 데이터 계산
-      const { start, end } = getVisibleRange();
-      const newData = {};
-      
-      for (let i = start; i <= end; i++) {
-        const cellId = `${i}-1`;
+    const newScrollTop = e.target.scrollTop;
+    setScrollTop(newScrollTop);
+    
+    // 현재 보이는 범위의 데이터만 계산
+    const { start, end } = getVisibleRange();
+    
+    // 계산이 필요한 셀들을 한 번에 수집
+    const newData = {...tableData};
+    let hasChanges = false;
+    
+    // 보이는 범위의 B열만 계산
+    for (let i = Math.max(0, start); i <= end; i++) {
+        const cellId = `${i}-1`;  // B열
         if (!tableData[cellId]) {
-          const formula = i === 0 ? '=A$1' : `=A$1+B${i}`;
-          newData[`${cellId}_raw`] = formula;
-          newData[cellId] = evaluateFormula(formula);
+            const formula = i === 0 ? '=A$1' : `=A$1+B${i}`;
+            newData[`${cellId}_raw`] = formula;
+            
+            // B1은 A1의 값을 직접 사용
+            if (i === 0) {
+                newData[cellId] = Number(newData['0-0']);
+                hasChanges = true;
+            }
+            // 나머지는 이전 값 + A1
+            else if (newData[`${i-1}-1`] !== undefined) {
+                newData[cellId] = Number(newData['0-0']) + Number(newData[`${i-1}-1`]);
+                hasChanges = true;
+            }
         }
-      }
-      
-      if (Object.keys(newData).length > 0) {
-        setTableData(prev => ({...prev, ...newData}));
-      }
-    });
-  }, [getVisibleRange, tableData, evaluateFormula]);
-  
+    }
+    
+    // 변경된 데이터가 있을 때만 상태 업데이트
+    if (hasChanges) {
+        setTableData(newData);
+    }
+}, [getVisibleRange, tableData]);
+
   // 알파벳 열 헤더 생성 함수
   const getColumnLabel = (index) => {
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -188,15 +206,15 @@ function Table() {
   // 9. 셀 표시 값 가져오기 (evaluateFormula 의존)
   const getCellDisplayValue = useCallback((cellId) => {
     const rawValue = tableData[`${cellId}_raw`] || '';
+    const value = tableData[cellId];
     
-    // 수식이 있는 경우 항상 evaluateFormula 사용
-    if (rawValue.startsWith('=')) {
-        return evaluateFormula(rawValue);
+    // 수식이 있고 값이 아직 없는 경우
+    if (rawValue.startsWith('=') && value === undefined) {
+        return '...';
     }
     
-    // 수식이 없는 경우 저장된 값 반환
-    return tableData[cellId] || '';
-  }, [tableData, evaluateFormula]);
+    return value || '';
+  }, [tableData]);
 
   // 10. 재계산 함수
   const recalculateDependents = useCallback((changedCellId) => {
