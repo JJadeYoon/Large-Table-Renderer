@@ -1,70 +1,82 @@
-# Getting Started with Create React App
+# Large Table Renderer
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+대용량 데이터를 처리할 수 있는 Excel과 유사한 테이블 렌더러입니다. 100만 행의 데이터를 효율적으로 처리하며, 수식 계산과 셀 간의 의존성을 지원합니다.
 
-## Available Scripts
+## 주요 기능
 
-In the project directory, you can run:
+### 1. 가상화된 스크롤
+- 100만 행의 데이터를 부드럽게 스크롤
+- 현재 보이는 영역의 데이터만 렌더링하여 메모리 효율성 확보
+- 스크롤 시 동적으로 데이터 로드
 
-### `npm start`
+### 2. 수식 계산 기능
+- Excel과 유사한 수식 문법 지원
+- 셀 참조를 통한 계산 (예: =A1+B1)
+- 실시간 수식 계산 및 업데이트
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+### 3. 셀 의존성 관리
+- 셀 간의 의존성 자동 추적
+- 의존성 그래프를 통한 효율적인 업데이트
+- 순환 참조 방지
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+### 4. 최적화된 성능
+- React.memo를 통한 불필요한 리렌더링 방지
+- 계산 결과 캐싱
+- 배치 업데이트를 통한 성능 최적화
 
-### `npm test`
+## 기술 스택
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+- React 18
+- JavaScript
+- CSS
 
-### `npm run build`
+## 실행 방법
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+1. 의존성 설치
+```bash
+npm install
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+2. 개발 서버 실행
+```bash
+npm start
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+3. 브라우저에서 확인
+```
+http://localhost:3000
+```
 
-### `npm run eject`
+## 구현 방식
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+### 1. 가상 스크롤 구현
+- 전체 테이블 높이를 계산하여 스크롤바 크기 설정
+- 현재 스크롤 위치를 기반으로 보이는 행만 렌더링
+- 위/아래 여백을 동적으로 조정하여 스크롤 위치 보정
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### 2. 수식 처리
+- 정규식을 사용하여 셀 참조 파싱
+- 의존성 그래프 구축 및 관리
+- 재귀적 수식 평가 로직
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+### 3. 상태 관리
+- 테이블 데이터는 객체 형태로 관리
+- 셀 ID를 키로 사용하여 O(1) 접근
+- 수식과 계산된 값을 별도로 저장
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+### 4. 성능 최적화
+- requestAnimationFrame을 사용한 배치 업데이트
+- 메모이제이션을 통한 리렌더링 최적화
+- 계산 캐시를 통한 중복 계산 방지
 
-## Learn More
+## 프로젝트 구조
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+```
+src/
+  ├── components/
+  │   ├── Table.js     # 메인 테이블 컴포넌트
+  │   └── Cell.js      # 개별 셀 컴포넌트
+  ├── styles/
+  │   └── Table.css    # 테이블 스타일
+  └── App.js           # 앱 진입점
+```
