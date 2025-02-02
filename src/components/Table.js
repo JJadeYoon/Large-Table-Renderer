@@ -3,94 +3,24 @@ import '../styles/Table.css';
 import Cell from './Cell';
 
 function Table() {
+  // 1. 상수 선언
   const rows = 10000;
   const cols = 3;
   const rowHeight = 35;  // 행 높이
   const viewportHeight = window.innerHeight - 100;  // 화면 높이에서 여백 제외
   
-  // 스크롤 위치 상태 관리
+  // 2. 상태 선언
   const [scrollTop, setScrollTop] = useState(0);
+  const [editingCell, setEditingCell] = useState(null);
+  const [tableData, setTableData] = useState({});
+  const [dependencyGraph, setDependencyGraph] = useState({});
+  const [calculationCache, setCalculationCache] = useState({});
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // 3. ref 선언
   const containerRef = useRef(null);
   
-  // 현재 보여질 행 범위 계산
-  const getVisibleRange = useCallback(() => {
-    const start = Math.max(0, Math.floor(scrollTop / rowHeight) - 5);
-    const visibleRows = Math.ceil(viewportHeight / rowHeight);
-    const end = Math.min(start + visibleRows + 15, rows);
-    return { start, end };
-  }, [scrollTop]);
-  
-  // 스크롤 이벤트 핸들러
-  const handleScroll = useCallback((e) => {
-    requestAnimationFrame(() => {
-      setScrollTop(e.target.scrollTop);
-    });
-  }, []);
-  
-  // 알파벳 열 헤더 생성 함수
-  const getColumnLabel = (index) => {
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    return letters[index];
-  };
-  
-  // 편집 중인 셀의 위치를 저장
-  const [editingCell, setEditingCell] = useState(null);
-  const [tableData, setTableData] = useState({});  // 빈 객체로 초기화
-
-  // 셀 의존성 그래프 저장
-  const [dependencyGraph, setDependencyGraph] = useState({});
-  
-  // 계산 결과 캐시
-  const [calculationCache, setCalculationCache] = useState({});
-
-  // 초기 데이터 로딩 상태
-  const [isLoading, setIsLoading] = useState(true);
-
-  // 초기 데이터 설정 함수
-  const setupTestData = () => {
-    const newData = {};
-    newData['0-0'] = 1;  // A1 셀의 초기값을 1로 설정
-    newData['0-0_raw'] = '1';
-    
-    const batchSize = 5000;
-    let processed = 0;
-    
-    const processNextBatch = () => {
-      const end = Math.min(processed + batchSize, rows);
-      const batchData = {};
-      
-      for (let i = processed; i < end; i++) {
-        const formula = i === 0 ? '=A$1' : `=A$1+B${i}`;
-        batchData[`${i}-1_raw`] = formula;
-        
-        // B열의 값을 수식에 따라 계산
-        if (i === 0) {
-          // B1의 경우 A1의 값을 그대로 사용
-          batchData[`${i}-1`] = Number(newData['0-0']);
-        } else {
-          // Bi의 경우 A1 + B(i-1) 계산
-          const a1Value = Number(newData['0-0']);
-          const prevBValue = Number(batchData[`${i-1}-1`]) || Number(newData[`${i-1}-1`]) || 0;
-          batchData[`${i}-1`] = a1Value + prevBValue;
-        }
-      }
-      
-      Object.assign(newData, batchData);
-      setTableData(newData);
-      
-      processed = end;
-      
-      if (processed < rows) {
-        requestAnimationFrame(processNextBatch);
-      } else {
-        setIsLoading(false);
-      }
-    };
-    
-    requestAnimationFrame(processNextBatch);
-  };
-
-  // 1. 기본 유틸리티 함수들 먼저 선언
+  // 4. 기본 유틸리티 함수들
   const calculateExpression = (expression) => {
     if (!/^[0-9+\-*/\s.()]+$/.test(expression)) {
       throw new Error('Invalid expression');
@@ -107,7 +37,7 @@ function Table() {
     return [row, col];
   };
 
-  // 2. 데이터 관련 기본 함수들
+  // 5. 데이터 관련 기본 함수들
   const getCellValue = useCallback((cellId) => {
     return tableData[cellId] || '';
   }, [tableData]);
@@ -116,7 +46,7 @@ function Table() {
     return tableData[`${cellId}_raw`] || tableData[cellId] || '';
   }, [tableData]);
 
-  // 3. 의존성 그래프 관련 함수
+  // 6. 의존성 그래프 관련 함수
   const updateDependencyGraph = useCallback((dependencies, formula) => {
     setDependencyGraph(prev => {
       const newGraph = {...prev};
@@ -130,7 +60,7 @@ function Table() {
     });
   }, []);
 
-  // 4. 수식 계산 관련 함수들
+  // 7. 수식 계산 관련 함수들
   const createCacheKey = useCallback((formula, relevantData) => {
     return `${formula}_${Object.values(relevantData).join('_')}`;
   }, []);
@@ -187,16 +117,88 @@ function Table() {
     }
   }, [calculationCache, updateDependencyGraph, tableData, createCacheKey]);
 
-  // 5. 셀 표시 값 가져오기 (evaluateFormula 의존)
+  // 8. 화면 관련 함수들
+  const getVisibleRange = useCallback(() => {
+    const start = Math.max(0, Math.floor(scrollTop / rowHeight) - 5);
+    const visibleRows = Math.ceil(viewportHeight / rowHeight);
+    const end = Math.min(start + visibleRows + 15, rows);
+    return { start, end };
+  }, [scrollTop]);
+
+  const handleScroll = useCallback((e) => {
+    requestAnimationFrame(() => {
+      const newScrollTop = e.target.scrollTop;
+      setScrollTop(newScrollTop);
+      
+      // 새로 보이는 행들의 데이터 계산
+      const { start, end } = getVisibleRange();
+      const newData = {};
+      
+      for (let i = start; i <= end; i++) {
+        const cellId = `${i}-1`;
+        if (!tableData[cellId]) {
+          const formula = i === 0 ? '=A$1' : `=A$1+B${i}`;
+          newData[`${cellId}_raw`] = formula;
+          newData[cellId] = evaluateFormula(formula);
+        }
+      }
+      
+      if (Object.keys(newData).length > 0) {
+        setTableData(prev => ({...prev, ...newData}));
+      }
+    });
+  }, [getVisibleRange, tableData, evaluateFormula]);
+  
+  // 알파벳 열 헤더 생성 함수
+  const getColumnLabel = (index) => {
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    return letters[index];
+  };
+  
+  // 초기 데이터 설정 함수
+  const setupTestData = () => {
+    const newData = {};
+    
+    // A1 값 설정
+    newData['0-0'] = 1;
+    newData['0-0_raw'] = '1';
+    
+    // 처음 화면에 보이는 부분의 수식과 값을 미리 계산
+    const visibleRows = Math.ceil(viewportHeight / rowHeight) + 20;
+    
+    // B1 값을 먼저 설정 (A1 참조)
+    newData['0-1'] = 1;  // A1의 값
+    newData['0-1_raw'] = '=A$1';
+    
+    // B2부터 순차적으로 계산
+    for (let i = 1; i < visibleRows; i++) {
+        const formula = `=A$1+B${i}`;
+        const cellId = `${i}-1`;
+        newData[`${cellId}_raw`] = formula;
+        
+        // 이전 B열 값 + A1 값
+        const prevBValue = newData[`${i-1}-1`];
+        newData[cellId] = prevBValue + newData['0-0'];
+    }
+    
+    setTableData(newData);
+    setIsLoading(false);
+  };
+
+  // 9. 셀 표시 값 가져오기 (evaluateFormula 의존)
   const getCellDisplayValue = useCallback((cellId) => {
     const rawValue = tableData[`${cellId}_raw`] || '';
+    
+    // 수식이 있는 경우 항상 evaluateFormula 사용
     if (rawValue.startsWith('=')) {
-      return evaluateFormula(rawValue);
+        return evaluateFormula(rawValue);
     }
+    
+    // 수식이 없는 경우 저장된 값 반환
     return tableData[cellId] || '';
   }, [tableData, evaluateFormula]);
 
-  // 6. 재계산 함수
+  // 10. 재계산 함수
   const recalculateDependents = useCallback((changedCellId) => {
     const dependents = dependencyGraph[changedCellId] || [];
     const processed = new Set();
@@ -220,7 +222,7 @@ function Table() {
     dependents.forEach(recalculate);
   }, [dependencyGraph, tableData, evaluateFormula]);
 
-  // 7. 이벤트 핸들러들
+  // 11. 이벤트 핸들러들
   const handleCellDoubleClick = useCallback((rowIndex, colIndex) => {
     setEditingCell(`${rowIndex}-${colIndex}`);
   }, []);
@@ -247,7 +249,7 @@ function Table() {
     setEditingCell(null);
   }, []);
 
-  // 8. 렌더링 관련 함수들
+  // 12. 렌더링 관련 함수들
   const renderRow = useCallback((rowIndex) => {
     return (
       <tr key={rowIndex}>
