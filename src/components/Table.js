@@ -4,7 +4,7 @@ import Cell from './Cell';
 
 function Table() {
   // 1. 상수 선언
-  const rows = 10000;
+  const rows = 100000;
   const cols = 3;
   const rowHeight = 35;  // 행 높이
   const viewportHeight = window.innerHeight - 100;  // 화면 높이에서 여백 제외
@@ -51,26 +51,26 @@ function Table() {
     return tableData[`${cellId}_raw`] || tableData[cellId] || '';
   }, [tableData]);
 
-  // 6. 의존성 그래프 관련 함수
-  const updateDependencyGraph = useCallback((dependencies, formula) => {
+  // 6. 의존성 그래프 관련 함수 수정
+  const updateDependencyGraph = useCallback((dependencies, targetCellId) => {
     setDependencyGraph(prev => {
       const newGraph = {...prev};
       dependencies.forEach(dep => {
         if (!newGraph[dep]) {
           newGraph[dep] = new Set();
         }
-        newGraph[dep].add(formula);
+        newGraph[dep].add(targetCellId);
       });
       return newGraph;
     });
   }, []);
 
-  // 7. 수식 계산 관련 함수들
+  // 7. 수식 계산 관련 함수들 수정
   const createCacheKey = useCallback((formula, relevantData) => {
     return `${formula}_${Object.values(relevantData).join('_')}`;
   }, []);
 
-  const evaluateFormula = useCallback((formula, data = tableData) => {
+  const evaluateFormula = useCallback((formula, cellId, data = tableData) => {
     try {
       const dependencies = new Set();
       const relevantData = {};
@@ -78,14 +78,14 @@ function Table() {
       // 수식에서 셀 참조 찾기
       formula.replace(/[A-Z]+\d+/g, (cellRef) => {
         const [row, col] = parseCellReference(cellRef);
-        const cellId = `${row}-${col}`;
-        dependencies.add(cellId);
-        relevantData[cellId] = data[cellId];
+        const depCellId = `${row}-${col}`;
+        dependencies.add(depCellId);
+        relevantData[depCellId] = data[depCellId];
       });
 
       const cacheKey = createCacheKey(formula, relevantData);
       if (calculationCache[cacheKey] !== undefined) {
-        return calculationCache[cacheKey];
+        return { result: calculationCache[cacheKey], dependencies };
       }
       
       const expression = formula.substring(1).replace(/\s+/g, '');
@@ -94,14 +94,13 @@ function Table() {
       // 수식 내의 각 셀 참조를 실제 값으로 대체
       const evaluatedExpression = expressionWithoutDollar.replace(/[A-Z]+\d+/g, (cellRef) => {
         const [row, col] = parseCellReference(cellRef);
-        const cellId = `${row}-${col}`;
-        dependencies.add(cellId);
+        const depCellId = `${row}-${col}`;
+        dependencies.add(depCellId);
         
-        // 참조된 셀이 수식을 가지고 있다면 먼저 그 수식을 계산
-        const rawValue = data[`${cellId}_raw`] || '';
+        const rawValue = data[`${depCellId}_raw`] || '';
         const value = rawValue.startsWith('=') 
-          ? evaluateFormula(rawValue, data)
-          : Number(data[cellId]) || 0;
+          ? evaluateFormula(rawValue, depCellId, data).result
+          : Number(data[depCellId]) || 0;
           
         return value;
       });
@@ -113,12 +112,14 @@ function Table() {
         [cacheKey]: result
       }));
       
-      updateDependencyGraph(Array.from(dependencies), formula);
+      if (cellId) {
+        updateDependencyGraph(Array.from(dependencies), cellId);
+      }
       
-      return Number(result);
+      return { result: Number(result), dependencies };
     } catch (error) {
       console.error('Formula evaluation error:', error);
-      return '#ERROR!';
+      return { result: '#ERROR!', dependencies: new Set() };
     }
   }, [calculationCache, updateDependencyGraph, tableData, createCacheKey]);
 
@@ -134,38 +135,48 @@ function Table() {
     const newScrollTop = e.target.scrollTop;
     setScrollTop(newScrollTop);
     
-    // 현재 보이는 범위의 데이터만 계산
     const { start, end } = getVisibleRange();
     
-    // 계산이 필요한 셀들을 한 번에 수집
     const newData = {...tableData};
+    const newDependencyGraph = {...dependencyGraph};
     let hasChanges = false;
     
-    // 보이는 범위의 B열만 계산
     for (let i = Math.max(0, start); i <= end; i++) {
-        const cellId = `${i}-1`;  // B열
-        if (!tableData[cellId]) {
-            const formula = i === 0 ? '=A$1' : `=A$1+B${i}`;
-            newData[`${cellId}_raw`] = formula;
-            
-            // B1은 A1의 값을 직접 사용
-            if (i === 0) {
-                newData[cellId] = Number(newData['0-0']);
-                hasChanges = true;
-            }
-            // 나머지는 이전 값 + A1
-            else if (newData[`${i-1}-1`] !== undefined) {
-                newData[cellId] = Number(newData['0-0']) + Number(newData[`${i-1}-1`]);
-                hasChanges = true;
-            }
+      const cellId = `${i}-1`;  // B열
+      if (!tableData[cellId]) {
+        const formula = i === 0 ? '=A$1' : `=A$1+B${i}`;
+        newData[`${cellId}_raw`] = formula;
+        
+        // 의존성 설정
+        if (!newDependencyGraph['0-0']) {
+          newDependencyGraph['0-0'] = new Set();
         }
+        newDependencyGraph['0-0'].add(cellId);
+        
+        if (i > 0) {
+          const prevCellId = `${i-1}-1`;
+          if (!newDependencyGraph[prevCellId]) {
+            newDependencyGraph[prevCellId] = new Set();
+          }
+          newDependencyGraph[prevCellId].add(cellId);
+        }
+        
+        // 값 계산
+        if (i === 0) {
+          newData[cellId] = Number(newData['0-0']);
+          hasChanges = true;
+        } else if (newData[`${i-1}-1`] !== undefined) {
+          newData[cellId] = Number(newData['0-0']) + Number(newData[`${i-1}-1`]);
+          hasChanges = true;
+        }
+      }
     }
     
-    // 변경된 데이터가 있을 때만 상태 업데이트
     if (hasChanges) {
-        setTableData(newData);
+      setTableData(newData);
+      setDependencyGraph(newDependencyGraph);
     }
-}, [getVisibleRange, tableData]);
+  }, [getVisibleRange, tableData, dependencyGraph]);
 
   // 알파벳 열 헤더 생성 함수
   const getColumnLabel = (index) => {
@@ -176,6 +187,7 @@ function Table() {
   // 초기 데이터 설정 함수
   const setupTestData = () => {
     const newData = {};
+    const newDependencyGraph = {};
     
     // A1 값 설정
     newData['0-0'] = 1;
@@ -185,21 +197,43 @@ function Table() {
     const visibleRows = Math.ceil(viewportHeight / rowHeight) + 20;
     
     // B1 값을 먼저 설정 (A1 참조)
+    const b1Formula = '=A$1';
     newData['0-1'] = 1;  // A1의 값
-    newData['0-1_raw'] = '=A$1';
+    newData['0-1_raw'] = b1Formula;
+    
+    // B1의 의존성 설정 (A1에 의존)
+    if (!newDependencyGraph['0-0']) {
+      newDependencyGraph['0-0'] = new Set();
+    }
+    newDependencyGraph['0-0'].add('0-1');
     
     // B2부터 순차적으로 계산
     for (let i = 1; i < visibleRows; i++) {
-        const formula = `=A$1+B${i}`;
-        const cellId = `${i}-1`;
-        newData[`${cellId}_raw`] = formula;
-        
-        // 이전 B열 값 + A1 값
-        const prevBValue = newData[`${i-1}-1`];
-        newData[cellId] = prevBValue + newData['0-0'];
+      const formula = `=A$1+B${i}`;
+      const cellId = `${i}-1`;
+      newData[`${cellId}_raw`] = formula;
+      
+      // 이전 B열 값 + A1 값
+      const prevBValue = newData[`${i-1}-1`];
+      newData[cellId] = prevBValue + newData['0-0'];
+      
+      // 의존성 설정
+      // A1에 대한 의존성
+      if (!newDependencyGraph['0-0']) {
+        newDependencyGraph['0-0'] = new Set();
+      }
+      newDependencyGraph['0-0'].add(cellId);
+      
+      // 이전 B열 셀에 대한 의존성
+      const prevCellId = `${i-1}-1`;
+      if (!newDependencyGraph[prevCellId]) {
+        newDependencyGraph[prevCellId] = new Set();
+      }
+      newDependencyGraph[prevCellId].add(cellId);
     }
     
     setTableData(newData);
+    setDependencyGraph(newDependencyGraph);
     setIsLoading(false);
   };
 
@@ -216,31 +250,32 @@ function Table() {
     return value || '';
   }, [tableData]);
 
-  // 10. 재계산 함수
+  // 10. 재계산 함수 수정
   const recalculateDependents = useCallback((changedCellId) => {
-    const dependents = dependencyGraph[changedCellId] || [];
     const processed = new Set();
+    const queue = [...(dependencyGraph[changedCellId] || [])];
     
-    const recalculate = (cellId) => {
-      if (processed.has(cellId)) return;
+    while (queue.length > 0) {
+      const cellId = queue.shift();
+      if (processed.has(cellId)) continue;
       processed.add(cellId);
       
       const formula = tableData[`${cellId}_raw`];
       if (formula && formula.startsWith('=')) {
-        const newValue = evaluateFormula(formula);
+        const { result } = evaluateFormula(formula, cellId);
         setTableData(prev => ({
           ...prev,
-          [cellId]: newValue
+          [cellId]: result
         }));
         
-        (dependencyGraph[cellId] || []).forEach(recalculate);
+        // 현재 셀에 의존하는 다른 셀들을 큐에 추가
+        const nextDependents = dependencyGraph[cellId] || [];
+        queue.push(...nextDependents);
       }
-    };
-    
-    dependents.forEach(recalculate);
+    }
   }, [dependencyGraph, tableData, evaluateFormula]);
 
-  // 11. 이벤트 핸들러들
+  // 11. 이벤트 핸들러들 수정
   const handleCellDoubleClick = useCallback((rowIndex, colIndex) => {
     setEditingCell(`${rowIndex}-${colIndex}`);
   }, []);
@@ -249,19 +284,59 @@ function Table() {
     const newValue = e.target.value;
     const cellId = `${rowIndex}-${colIndex}`;
     
-    const finalValue = newValue.startsWith('=') 
-      ? evaluateFormula(newValue)
-      : newValue;
+    // 먼저 모든 의존성 관계를 찾기 위해 전체 tableData를 검사
+    const allDependents = new Set();
+    const findAllDependents = (id) => {
+      const deps = dependencyGraph[id];
+      if (!deps) return;
+      
+      deps.forEach(depId => {
+        if (!allDependents.has(depId)) {
+          allDependents.add(depId);
+          findAllDependents(depId);
+        }
+      });
+    };
+    findAllDependents(cellId);
     
-    setTableData(prev => ({
-      ...prev,
-      [cellId]: finalValue,
-      [`${cellId}_raw`]: newValue
-    }));
-    
-    setCalculationCache({});
-    recalculateDependents(cellId);
-  }, [evaluateFormula, recalculateDependents]);
+    // 모든 업데이트를 하나의 배치로 처리
+    const batchUpdate = () => {
+      const newData = { ...tableData };
+      
+      // 1. 현재 셀 값 업데이트
+      newData[`${cellId}_raw`] = newValue;
+      if (newValue.startsWith('=')) {
+        const { result } = evaluateFormula(newValue, cellId, newData);
+        newData[cellId] = result;
+      } else {
+        newData[cellId] = isNaN(Number(newValue)) ? newValue : Number(newValue);
+      }
+      
+      // 2. 모든 의존성이 있는 셀들의 수식 재평가
+      const evaluated = new Set();
+      const toEvaluate = Array.from(allDependents);
+      
+      while (toEvaluate.length > 0) {
+        const currentId = toEvaluate[0];
+        const formula = newData[`${currentId}_raw`] || '';
+        
+        if (formula.startsWith('=') && !evaluated.has(currentId)) {
+          const { result } = evaluateFormula(formula, currentId, newData);
+          newData[currentId] = Number(result);
+          evaluated.add(currentId);
+        }
+        
+        toEvaluate.shift();
+      }
+      
+      // 3. 한 번에 모든 업데이트 적용
+      setTableData(newData);
+      setCalculationCache({});
+    };
+
+    // React의 다음 틱에서 실행하여 상태 업데이트를 보장
+    requestAnimationFrame(batchUpdate);
+  }, [evaluateFormula, dependencyGraph, tableData]);
 
   const handleBlur = useCallback(() => {
     setEditingCell(null);
