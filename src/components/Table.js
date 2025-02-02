@@ -3,7 +3,7 @@ import '../styles/Table.css';
 import Cell from './Cell';
 
 function Table() {
-  const rows = 100000;
+  const rows = 1000000;
   const cols = 3;
   const rowHeight = 35;  // 행 높이
   const viewportHeight = window.innerHeight - 100;  // 화면 높이에서 여백 제외
@@ -14,15 +14,17 @@ function Table() {
   
   // 현재 보여질 행 범위 계산
   const getVisibleRange = useCallback(() => {
-    const start = Math.floor(scrollTop / rowHeight);
+    const start = Math.max(0, Math.floor(scrollTop / rowHeight) - 5);
     const visibleRows = Math.ceil(viewportHeight / rowHeight);
-    const end = Math.min(start + visibleRows + 10, rows); // 버퍼 증가
+    const end = Math.min(start + visibleRows + 15, rows);
     return { start, end };
   }, [scrollTop]);
   
   // 스크롤 이벤트 핸들러
   const handleScroll = useCallback((e) => {
-    setScrollTop(e.target.scrollTop);
+    requestAnimationFrame(() => {
+      setScrollTop(e.target.scrollTop);
+    });
   }, []);
   
   // 알파벳 열 헤더 생성 함수
@@ -47,39 +49,41 @@ function Table() {
   // 초기 데이터 설정 함수
   const setupTestData = () => {
     const newData = {};
-    // A1에 초기값 설정
     newData['0-0'] = 1;
     newData['0-0_raw'] = '1';
     
-    // 배치 크기 설정
-    const batchSize = 1000;
+    // 배치 크기를 더 크게 설정
+    const batchSize = 5000;
     let processed = 0;
     
     const processNextBatch = () => {
       const end = Math.min(processed + batchSize, rows);
+      const batchData = {};
       
       for (let i = processed; i < end; i++) {
         const formula = i === 0 ? '=A$1' : `=A$1+B${i}`;
-        newData[`${i}-1_raw`] = formula;
+        batchData[`${i}-1_raw`] = formula;
         if (i === 0) {
-          newData[`${i}-1`] = 1;  // B1 = A1 = 1
+          batchData[`${i}-1`] = 1;
         } else {
-          const prevValue = Number(newData[`${i-1}-1`]) || 0;
-          newData[`${i}-1`] = 1 + prevValue;  // B{i+1} = A1 + B{i}
+          const prevValue = Number(batchData[`${i-1}-1`]) || Number(newData[`${i-1}-1`]) || 0;
+          batchData[`${i}-1`] = 1 + prevValue;
         }
       }
       
-      setTableData(prev => ({...prev, ...newData}));
+      Object.assign(newData, batchData);
+      setTableData(newData);
+      
       processed = end;
       
       if (processed < rows) {
-        setTimeout(processNextBatch, 0);
+        requestAnimationFrame(processNextBatch);
       } else {
         setIsLoading(false);
       }
     };
     
-    processNextBatch();
+    requestAnimationFrame(processNextBatch);
   };
 
   // 1. 기본 유틸리티 함수들 먼저 선언
@@ -123,17 +127,30 @@ function Table() {
   }, []);
 
   // 4. 수식 계산 관련 함수들
+  const createCacheKey = useCallback((formula, relevantData) => {
+    return `${formula}_${Object.values(relevantData).join('_')}`;
+  }, []);
+
   const evaluateFormula = useCallback((formula, data = tableData) => {
     try {
-      const cacheKey = `${formula}_${JSON.stringify(data)}`;
+      const dependencies = new Set();
+      const relevantData = {};
+      
+      // 먼저 의존성 수집
+      formula.replace(/[A-Z]+\d+/g, (cellRef) => {
+        const [row, col] = parseCellReference(cellRef);
+        const cellId = `${row}-${col}`;
+        dependencies.add(cellId);
+        relevantData[cellId] = data[cellId];
+      });
+
+      const cacheKey = createCacheKey(formula, relevantData);
       if (calculationCache[cacheKey] !== undefined) {
         return calculationCache[cacheKey];
       }
       
       const expression = formula.substring(1).replace(/\s+/g, '');
       const expressionWithoutDollar = expression.replace(/\$/g, '');
-      
-      const dependencies = new Set();
       
       const evaluatedExpression = expressionWithoutDollar.replace(/[A-Z]+\d+/g, (cellRef) => {
         const [row, col] = parseCellReference(cellRef);
@@ -157,7 +174,7 @@ function Table() {
       console.error('Formula evaluation error:', error);
       return '#ERROR!';
     }
-  }, [calculationCache, updateDependencyGraph, tableData]);
+  }, [calculationCache, updateDependencyGraph, tableData, createCacheKey]);
 
   // 5. 셀 표시 값 가져오기 (evaluateFormula 의존)
   const getCellDisplayValue = useCallback((cellId) => {
@@ -254,6 +271,18 @@ function Table() {
     setupTestData();
   }, []);  // 빈 의존성 배열
 
+  // 행 렌더링 최적화
+  const renderRows = useMemo(() => {
+    const { start, end } = getVisibleRange();
+    const rows = [];
+    
+    for (let rowIndex = start; rowIndex <= end; rowIndex++) {
+      rows.push(renderRow(rowIndex));
+    }
+    
+    return rows;
+  }, [getVisibleRange, renderRow]);
+
   return (
     <div 
       className="table-container" 
@@ -274,37 +303,33 @@ function Table() {
           Loading...
         </div>
       ) : (
-      <table>
-        <thead>
-          <tr>
-            <th className="row-header">Row</th>
-            {Array(cols).fill().map((_, colIndex) => (
-              <th key={colIndex}>
-                {getColumnLabel(colIndex)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td colSpan={cols + 1} style={{ height: scrollTop, padding: 0 }} />
-          </tr>
-          {Array(rows).fill().map((_, rowIndex) => {
-            const { start, end } = memoizedVisibleRange;
-            if (rowIndex < start || rowIndex > end) return null;
-            return renderRow(rowIndex);
-          })}
-          <tr>
-            <td colSpan={cols + 1} style={{ 
-              height: (rows - getVisibleRange().end) * rowHeight,
-              padding: 0 
-            }} />
-          </tr>
-        </tbody>
-      </table>
+        <table>
+          <thead>
+            <tr>
+              <th className="row-header">Row</th>
+              {Array(cols).fill().map((_, colIndex) => (
+                <th key={colIndex}>
+                  {getColumnLabel(colIndex)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colSpan={cols + 1} style={{ height: scrollTop, padding: 0 }} />
+            </tr>
+            {renderRows}
+            <tr>
+              <td colSpan={cols + 1} style={{ 
+                height: (rows - getVisibleRange().end) * rowHeight,
+                padding: 0 
+              }} />
+            </tr>
+          </tbody>
+        </table>
       )}
     </div>
   );
 }
 
-export default Table; 
+export default React.memo(Table); 
